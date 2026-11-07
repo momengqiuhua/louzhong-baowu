@@ -289,7 +289,7 @@
     <i>移动</i><span><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>或 <span class="kbd">↑</span><span class="kbd">←</span><span class="kbd">↓</span><span class="kbd">→</span> 前后左右，方向跟着视线走</span>
     <i>转头</i><span>按住<b>鼠标左键或右键</b>拖动，水平可转 360°，上下有俯仰限位；轻点展柜近观</span>
     <i>疾走</i><span><span class="kbd">Shift</span>加速到 8 m/s</span>
-    <i>升降</i><span><span class="kbd">空格</span>升 · <span class="kbd">Alt</span>/<span class="kbd">E</span>降 · <span class="kbd">Q</span>也升</span>
+    <i>升降</i><span><span class="kbd">空格</span>升 · <span class="kbd">Alt</span>/<span class="kbd">Q</span>/<span class="kbd">E</span>降</span>
     <i>俯瞰</i><span><span class="kbd">F</span>升到 4.8m 俯看全馆，再按回落</span>
     <i>回位</i><span><span class="kbd">R</span>回到入口站姿</span>
     <i>步速</i><span>滚轮调节，右下角实时显示</span>
@@ -1357,8 +1357,8 @@ function updateWalk(dt, now) {
   const K = WALK.keys;
   if (autoRotate) WALK.yaw += dt * 0.3;
 
-  // 竖直：空格 / Q 升，Alt / E 降
-  const vUp = (K[' '] || K.q ? 1 : 0) - (K.alt || K.e ? 1 : 0);
+  // 竖直：空格升，Alt / Q / E 降
+  const vUp = (K[' '] ? 1 : 0) - (K.alt || K.q || K.e ? 1 : 0);
   if (vUp) { WALK.eye = Math.max(EYE_MIN, Math.min(EYE_MAX, WALK.eye + vUp * 2.4 * dt)); WALK.eyeTo = null; WALK.top = false; }
   else if (WALK.eyeTo !== null) {
     WALK.eye += (WALK.eyeTo - WALK.eye) * Math.min(1, dt * 2.6);
