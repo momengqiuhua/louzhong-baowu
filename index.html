@@ -1291,8 +1291,8 @@ renderer.domElement.addEventListener('pointerdown', ev => {
 });
 
 /* ---------- 逐件加载（并行 + CDN 加速 + 同源兜底） ---------- */
-/* GitHub Pages 在国内带宽很差，模型优先走 jsDelivr 边缘节点，失败再退回同源 */
-const CDN = 'https://fastly.jsdelivr.net/gh/momengqiuhua/louzhong-baowu@main/';
+/* GitHub Pages 国内实测仅 ~35KB/s，模型优先走魔搭（ModelScope）国内直链（实测 3MB/s，且返回 ACAO:*），失败再退回同源 */
+const CDN = 'https://www.modelscope.cn/datasets/wumingzhibai/aholo-louzhong-baowu/resolve/master/';
 // 贴图压成 1024 WebP + 几何 meshopt 压缩（每件 1–2.3MB），解码器随 three 一起加载
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
@@ -1326,8 +1326,8 @@ function refreshProgress() {
   loadText.textContent = `正在布展：${PROPS.filter(p => p.model).length} / ${PROPS.length} 件已就位`;
 }
 
-// 单次请求，90 秒拿不到就当超时；404 单独标记，便于区分"文件缺失"与"网速慢"
-function fetchGLB(url, onPct) {
+// 单次请求，超时即放弃；404 单独标记，便于区分"文件缺失"与"网速慢"
+function fetchGLB(url, onPct, timeoutMs = 90000) {
   return new Promise(resolve => {
     let settled = false;
     const end = (v, why) => {
@@ -1337,7 +1337,7 @@ function fetchGLB(url, onPct) {
       if (!v) end.reason = why;
       resolve(v);
     };
-    const timer = setTimeout(() => end(null, 'timeout'), 90000);
+    const timer = setTimeout(() => end(null, 'timeout'), timeoutMs);
     loader.load(url, gltf => end(gltf), ev => {
       if (ev.lengthComputable) onPct(ev.loaded / ev.total);
     }, err => {
@@ -1347,28 +1347,15 @@ function fetchGLB(url, onPct) {
   });
 }
 
-// 双通道竞速：CDN 与同源同时尝试，谁先拿到用谁；CDN 先到就不再发同源请求
-function firstOf(promises) {
-  return new Promise(resolve => {
-    let done = false, pending = promises.length;
-    promises.forEach(pr => pr.then(v => {
-      pending--;
-      if (!done && v) { done = true; resolve(v); }
-      else if (pending === 0 && !done) { done = true; resolve(null); }
-    }, () => {
-      pending--;
-      if (pending === 0 && !done) { done = true; resolve(null); }
-    }));
-  });
-}
-
 async function loadProp(p, i) {
   const onPct = v => { p.pct = Math.max(p.pct || 0, Math.min(1, v)); refreshProgress(); };
 
-  let cdnDone = false;
-  const cdnReq = fetchGLB(CDN + p.file, onPct).then(g => { if (g) cdnDone = true; return g; });
-  const localReq = new Promise(r => setTimeout(r, 2500)).then(() => cdnDone ? null : fetchGLB(p.file, onPct));
-  const gltf = await firstOf([cdnReq, localReq]);
+  // 主通道：魔搭国内直链（25s 内拿不到就换同源，避免白等）
+  let gltf = await fetchGLB(CDN + p.file, onPct, 25000);
+  if (!gltf) {
+    p.pct = 0;
+    gltf = await fetchGLB(p.file, onPct, 60000);
+  }
   if (!gltf) { p.fail = 'timeout'; console.warn('加载失败', p.file); return; }
 
   const obj = gltf.scene;
@@ -1460,13 +1447,14 @@ async function loadProp(p, i) {
     toast(parts.join('；'));
     console.warn('缺件', { miss404, missSlow });
   }
-  // 序厅主角：华服立像（桌面端异步补；手机端与线上（模型未上传）跳过）
-  if (!isMobile && !/github\.io$/i.test(location.hostname)) loadFoyerFigure();
+  // 序厅主角：华服立像（桌面端异步补；手机端跳过）
+  if (!isMobile) loadFoyerFigure();
 })();
 
 /* 序厅顶光下的华服立像：不进八宝玩法，仅作空间主角 */
 async function loadFoyerFigure() {
-  const gltf = await fetchGLB('outputs/prop_hanfu_g1turbo/extract/mesh/tex_mesh.glb', () => {});
+  const gltf = (await fetchGLB(CDN + 'outputs/prop_hanfu_g1turbo/extract/mesh/tex_mesh.glb', () => {}))
+    || (await fetchGLB('outputs/prop_hanfu_g1turbo/extract/mesh/tex_mesh.glb', () => {}));
   if (!gltf) return;
   const obj = gltf.scene;
   const box = new THREE.Box3().setFromObject(obj);
