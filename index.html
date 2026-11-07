@@ -593,7 +593,7 @@ async function loadProp(p, i) {
   if (!loaded.length) {
     loadingEl.classList.add('hide');
     errorEl.style.display = 'flex';
-    errorEl.innerHTML = `器物全部加载失败。<br>请确认 D:\\AHOLO\\web\\outputs 联接有效，且 8899 服务已启动。`;
+    errorEl.innerHTML = `器物全部加载失败。<br>请刷新页面重试，或检查网络后重新打开。`;
     return;
   }
 
