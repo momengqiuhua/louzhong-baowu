@@ -1,0 +1,253 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>青铜鼎 · Lux3D G1-Turbo 预览</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #14161a; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  .hud { position: fixed; left: 22px; top: 20px; pointer-events: none; }
+  .hud h1 { font-size: 18px; font-weight: 600; letter-spacing: .5px; color: #f3f4f6; }
+  .hud p { margin-top: 4px; font-size: 12px; color: #9aa1ab; }
+
+  .panel { position: fixed; right: 20px; top: 20px; display: flex; gap: 8px; }
+  .btn {
+    pointer-events: auto; cursor: pointer; border: 1px solid #343a44; background: rgba(28,31,37,.86);
+    color: #d7dbe2; font-size: 12px; padding: 8px 12px; border-radius: 8px;
+    transition: background .15s, border-color .15s;
+  }
+  .btn:hover { background: #262b33; border-color: #4a525f; }
+
+  .meta {
+    position: fixed; left: 22px; bottom: 18px; font-size: 12px; color: #8b93a1;
+    background: rgba(20,22,26,.7); padding: 8px 12px; border-radius: 8px;
+    border: 1px solid #2a2f38;
+  }
+  .meta b { color: #cfd5de; font-weight: 500; }
+
+  #loading {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: #14161a; z-index: 10; transition: opacity .4s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  .ring { width: 42px; height: 42px; border: 3px solid #2b313a; border-top-color: #6ea8fe; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadText { font-size: 13px; color: #9aa1ab; }
+  #loadBar { width: 220px; height: 4px; background: #262b33; border-radius: 2px; overflow: hidden; }
+  #loadFill { height: 100%; width: 0%; background: #6ea8fe; transition: width .2s; }
+
+  #error {
+    position: fixed; inset: 0; display: none; flex-direction: column; gap: 10px;
+    align-items: center; justify-content: center; background: #14161a; z-index: 20;
+    color: #f0a3a3; font-size: 13px; text-align: center; padding: 30px;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://registry.npmmirror.com/three/0.169.0/files/build/three.module.js",
+    "three/addons/": "https://registry.npmmirror.com/three/0.169.0/files/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="hud">
+  <h1>青铜鼎 · 3D 预览</h1>
+  <p>单张 AI 概念图重建 · 1 积分 / 92 秒 · 展示距离：中远景（不做贴脸特写）</p>
+</div>
+
+<div class="panel">
+  <button class="btn" id="btnReset">重置视角</button>
+  <button class="btn" id="btnRotate">自动旋转</button>
+</div>
+
+<div class="meta" id="meta">模型加载中…</div>
+
+<div id="loading">
+  <div class="ring"></div>
+  <div id="loadText">加载 outputs/zhulou_g1turbo/ding/tex_mesh.glb（18.2 MB）…</div>
+  <div id="loadBar"><div id="loadFill"></div></div>
+</div>
+
+<div id="error"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const app = document.getElementById('app');
+const metaEl = document.getElementById('meta');
+const loadingEl = document.getElementById('loading');
+const loadText = document.getElementById('loadText');
+const loadFill = document.getElementById('loadFill');
+const errorEl = document.getElementById('error');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14161a);
+scene.fog = new THREE.Fog(0x14161a, 60, 260);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.05, 2000);
+
+const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x2a2f38, 1.15);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xfff2dd, 2.4);
+key.position.set(38, 52, 26);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1;
+key.shadow.camera.far = 260;
+key.shadow.bias = -0.0006;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight(0x88aaff, 1.0);
+rim.position.set(-30, 22, -34);
+scene.add(rim);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 0.2;
+controls.maxDistance = 900;
+controls.maxPolarAngle = Math.PI * 0.96;
+
+let model = null;
+let autoRotate = false;
+const DEFAULT_TARGET = new THREE.Vector3();
+let defaultPos = new THREE.Vector3();
+
+function fitCamera(object) {
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+  DEFAULT_TARGET.copy(center);
+  controls.target.copy(center);
+
+  const dist = maxDim * 2.4;
+  defaultPos.set(center.x + dist * 0.62, center.y + maxDim * 0.42, center.z + dist * 0.72);
+  camera.position.copy(defaultPos);
+  camera.near = maxDim / 800;
+  camera.far = maxDim * 40;
+  camera.updateProjectionMatrix();
+  controls.minDistance = maxDim * 1.2;   // 器物固定中远景，禁止贴脸特写
+  controls.maxDistance = maxDim * 8;
+  controls.update();
+
+  scene.fog.near = maxDim * 2;
+  scene.fog.far = maxDim * 9;
+
+  const grid = new THREE.GridHelper(maxDim * 3, 24, 0x3a4150, 0x262b33);
+  grid.position.y = box.min.y - maxDim * 0.002;
+  scene.add(grid);
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(maxDim * 6, maxDim * 6),
+    new THREE.ShadowMaterial({ opacity: 0.28 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = box.min.y - maxDim * 0.002;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  let tris = 0;
+  object.traverse(o => {
+    if (o.isMesh && o.geometry) {
+      const g = o.geometry;
+      tris += (g.index ? g.index.count : (g.attributes.position?.count || 0)) / 3;
+    }
+  });
+  const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1) + ' K' : String(Math.round(n));
+  metaEl.innerHTML = `<b>${fmt(tris)}</b> 三角面 · 尺寸 ${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
+}
+
+const loader = new GLTFLoader();
+loader.load(
+  'outputs/zhulou_g1turbo/ding/tex_mesh.glb',
+  gltf => {
+    model = gltf.scene;
+    model.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        if (o.material) o.material.side = THREE.FrontSide;
+      }
+    });
+    scene.add(model);
+    fitCamera(model);
+    loadingEl.classList.add('hide');
+    setTimeout(() => loadingEl.remove(), 500);
+  },
+  ev => {
+    if (ev.lengthComputable) {
+      const p = Math.min(100, ev.loaded / ev.total * 100);
+      loadFill.style.width = p.toFixed(0) + '%';
+      loadText.textContent = `加载 tex_mesh.glb ${(ev.loaded / 1048576).toFixed(1)} / ${(ev.total / 1048576).toFixed(1)} MB`;
+    }
+  },
+  err => {
+    loadingEl.classList.add('hide');
+    errorEl.style.display = 'flex';
+    errorEl.innerHTML = `模型加载失败：${err?.message || err}<br>请确认 outputs/zhulou_g1turbo/ding/tex_mesh.glb 存在，且服务已启动。`;
+  }
+);
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  camera.position.copy(defaultPos);
+  controls.target.copy(DEFAULT_TARGET);
+  controls.update();
+});
+
+document.getElementById('btnRotate').addEventListener('click', e => {
+  autoRotate = !autoRotate;
+  e.currentTarget.style.borderColor = autoRotate ? '#6ea8fe' : '#343a44';
+  e.currentTarget.style.color = autoRotate ? '#9cc4ff' : '#d7dbe2';
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+let last = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (autoRotate && model) {
+    const r = controls.target;
+    const dx = camera.position.x - r.x, dz = camera.position.z - r.z;
+    const ang = dt * 0.35;
+    camera.position.x = r.x + dx * Math.cos(ang) - dz * Math.sin(ang);
+    camera.position.z = r.z + dx * Math.sin(ang) + dz * Math.cos(ang);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
+

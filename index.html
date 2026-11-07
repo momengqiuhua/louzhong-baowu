@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>楼中宝物 · 夜游展厅</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #05070c; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* 展厅暗角，纯 CSS 程序化压暗边缘 */
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 2;
+    background:
+      radial-gradient(120% 90% at 50% 42%, rgba(0,0,0,0) 38%, rgba(0,0,0,.55) 100%),
+      linear-gradient(to bottom, rgba(4,6,11,.65) 0%, rgba(0,0,0,0) 26%, rgba(0,0,0,0) 72%, rgba(3,5,9,.8) 100%);
+  }
+
+  .hud { position: fixed; left: 26px; top: 24px; z-index: 5; pointer-events: none; max-width: 460px; }
+  .hud .kicker { font-size: 11px; letter-spacing: .32em; color: #6f7f96; text-transform: uppercase; }
+  .hud h1 { margin-top: 8px; font-size: 26px; font-weight: 600; letter-spacing: .08em; color: #f2eee6; }
+  .hud .sub { margin-top: 8px; font-size: 12px; line-height: 1.7; color: #8e9aac; }
+  .hud .sub b { color: #c8b98f; font-weight: 500; }
+
+  .panel { position: fixed; right: 24px; top: 24px; z-index: 6; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .btn {
+    pointer-events: auto; cursor: pointer; border: 1px solid #2b3442; background: rgba(16,21,29,.82);
+    color: #b9c4d3; font-size: 12px; padding: 8px 13px; border-radius: 8px;
+    transition: background .16s, border-color .16s, color .16s;
+    backdrop-filter: blur(6px);
+  }
+  .btn:hover { background: #1a2432; border-color: #3f5674; color: #dce6f3; }
+  .btn.on { border-color: #c8a96a; color: #f0dcae; background: rgba(44,36,22,.7); }
+
+  .meta {
+    position: fixed; left: 26px; bottom: 22px; z-index: 5; font-size: 12px; line-height: 1.8;
+    color: #7f8b9c; background: rgba(10,14,20,.7); padding: 10px 14px; border-radius: 9px;
+    border: 1px solid #1e2735; backdrop-filter: blur(6px);
+  }
+  .meta b { color: #d6c79f; font-weight: 500; }
+  .meta span { color: #5f6b7c; }
+
+  #loading {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: #05070c; z-index: 20; transition: opacity .5s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  .ring { width: 40px; height: 40px; border: 2px solid #1b2431; border-top-color: #c8a96a; border-radius: 50%; animation: spin 1.1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadText { font-size: 13px; color: #8e9aac; letter-spacing: .04em; }
+  #loadBar { width: 240px; height: 3px; background: #161d28; border-radius: 2px; overflow: hidden; }
+  #loadFill { height: 100%; width: 0%; background: linear-gradient(90deg,#7d6432,#d9bd7d); transition: width .25s; }
+
+  #error {
+    position: fixed; inset: 0; display: none; flex-direction: column; gap: 10px; z-index: 30;
+    align-items: center; justify-content: center; background: #05070c;
+    color: #e0a5a5; font-size: 13px; text-align: center; padding: 30px; line-height: 1.8;
+  }
+
+  /* ---------- 最小玩法：八宝归位 ---------- */
+  #game {
+    position: fixed; right: 24px; bottom: 22px; z-index: 6; width: 272px;
+    background: rgba(10,14,20,.78); border: 1px solid #1e2735; border-radius: 10px;
+    padding: 12px 14px; backdrop-filter: blur(8px); color: #8e9aac;
+    font-size: 12px; line-height: 1.7;
+  }
+  #game .gt { font-size: 11px; letter-spacing: .22em; color: #6f7f96; }
+  #game .gline { margin-top: 7px; font-size: 14px; letter-spacing: .06em; color: #efe6d2; }
+  #game .gprog { display: flex; gap: 5px; margin-top: 9px; }
+  #game .gprog i { flex: 1; height: 3px; border-radius: 2px; background: #1b2431; transition: background .3s; }
+  #game .gprog i.on { background: linear-gradient(90deg,#7d6432,#d9bd7d); }
+  #game .ghint { margin-top: 7px; min-height: 18px; color: #c9a06a; }
+  .btn.lit { border-color: #6b5527; color: #f0dcae; background: rgba(44,36,22,.78); }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); z-index: 9;
+    padding: 9px 16px; border-radius: 9px; background: rgba(20,14,10,.92);
+    border: 1px solid #4a3a22; color: #f0dcae; font-size: 13px; letter-spacing: .04em;
+    opacity: 0; transition: opacity .25s; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  #finish {
+    position: fixed; inset: 0; z-index: 12; display: none;
+    align-items: center; justify-content: center; background: rgba(3,5,9,.72);
+    backdrop-filter: blur(3px);
+  }
+  #finish.show { display: flex; }
+  #finish .card {
+    width: min(420px, 86vw); text-align: center; padding: 30px 26px; border-radius: 14px;
+    background: rgba(14,19,27,.96); border: 1px solid #4a3a22;
+    box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  }
+  #finish h2 { font-size: 22px; font-weight: 600; letter-spacing: .18em; color: #f2eee6; }
+  #finish p { margin-top: 12px; font-size: 13px; line-height: 1.9; color: #9aa6b7; }
+  #finish .btn { margin-top: 18px; display: inline-block; }
+
+  @media (max-width: 760px) {
+    .hud { max-width: 58vw; }
+    .hud h1 { font-size: 20px; }
+    .hud .sub { display: none; }
+    .meta { display: none; }
+    #game { left: 12px; right: 12px; bottom: 12px; width: auto; }
+    #toast { bottom: 120px; font-size: 12px; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://registry.npmmirror.com/three/0.169.0/files/build/three.module.js",
+    "three/addons/": "https://registry.npmmirror.com/three/0.169.0/files/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="vignette"></div>
+
+<div class="hud">
+  <div class="kicker">Yellow Crane · Hall of Relics</div>
+  <h1>楼中宝物 · 夜游展厅</h1>
+  <p class="sub">8 件器物 · AI 概念图 → Lux3D G1-Turbo 单图重建<br>
+     展示距离<b>中远景</b>，已锁定最小缩放，不做贴脸特写</p>
+</div>
+
+<div class="panel">
+  <div class="row" id="navRow"></div>
+  <div class="row">
+    <button class="btn" id="btnRotate">自动旋转</button>
+    <button class="btn" id="btnOverview">全景</button>
+  </div>
+</div>
+
+<div class="meta" id="meta">展厅布置中…</div>
+
+<div id="game">
+  <div class="gt">夜游集宝 · 按诗句顺序点亮</div>
+  <div class="gline" id="gLine">—</div>
+  <div class="gprog" id="gProg"></div>
+  <div class="ghint" id="gHint"></div>
+</div>
+
+<div id="toast"></div>
+
+<div id="finish">
+  <div class="card">
+    <h2>八宝归位</h2>
+    <p id="finishText">八件青铜器已按诗句顺序点亮，<br>夜游展厅至此圆满。</p>
+    <button class="btn" id="btnAgain">再走一遍</button>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="ring"></div>
+  <div id="loadText">正在点亮展厅…</div>
+  <div id="loadBar"><div id="loadFill"></div></div>
+</div>
+
+<div id="error"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const app = document.getElementById('app');
+const metaEl = document.getElementById('meta');
+const loadingEl = document.getElementById('loading');
+const loadText = document.getElementById('loadText');
+const loadFill = document.getElementById('loadFill');
+const errorEl = document.getElementById('error');
+const navRow = document.getElementById('navRow');
+const gLine = document.getElementById('gLine');
+const gProg = document.getElementById('gProg');
+const gHint = document.getElementById('gHint');
+const toastEl = document.getElementById('toast');
+const finishEl = document.getElementById('finish');
+
+/* ---------- 8 件器物（全部在 D:\AHOLO\outputs 下，经 web\outputs 联接访问） ---------- */
+const PROPS = [
+  { key: 'gu',        name: '青铜觚',   note: '商周饮酒器 · 喇叭口', file: 'outputs/prop_gu_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'bianzhong', name: '编钟',     note: '青铜礼乐重器',       file: 'outputs/prop_bianzhong_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'crane',     name: '仙鹤雕塑', note: '黄鹤意象 · 石雕',     file: 'outputs/prop_crane_statue_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'ding',      name: '青铜鼎',   note: '三足双耳 · 商周礼器', file: 'outputs/ai_ding_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'fangyi',    name: '青铜方尊', note: '兽面纹 · 四扉棱 · 商周礼器', file: 'outputs/prop_fangyi_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'boshanlu',  name: '博山炉',   note: '汉代香炉 · 山形盖',   file: 'outputs/prop_boshanlu_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'drum',      name: '铜鼓',     note: '太阳纹 · 打击礼器',   file: 'outputs/prop_bronzedrum_g1turbo/extract/mesh/tex_mesh.glb' },
+  { key: 'lantern',   name: '宫灯',     note: '暖光宫灯 · 夜游点题', file: 'outputs/prop_lantern2_g1turbo/extract/mesh/tex_mesh.glb' }
+];
+
+/* ---------- 最小玩法：八句诗对应八件器（按诗句顺序点亮） ---------- */
+const SONG = [
+  { key: 'ding',      line: '鼎镇江山烟水阔' },
+  { key: 'bianzhong', line: '钟鸣楚夜动江城' },
+  { key: 'fangyi',    line: '尊前纹兽守千年' },
+  { key: 'gu',        line: '一觚浊酒酹江月' },
+  { key: 'boshanlu',  line: '炉生山海一篆烟' },
+  { key: 'drum',      line: '鼓声催月过江来' },
+  { key: 'crane',     line: '鹤去楼空云自闲' },
+  { key: 'lantern',   line: '灯火重楼照夜归' }
+];
+let gStep = 0;
+let gDone = false;
+
+const NORM_MAX = 1.45;     // 每件器物归一化到最长边 1.45，保证展台尺度统一
+const PEDESTAL_H = 0.85;   // 展台高度
+
+/* ---------- 渲染器 ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x070b12, 11, 34);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.05, 400);
+camera.position.set(0, 3.4, 10.2);
+
+/* ---------- 程序化夜空：渐变 + 月光晕（纯 shader，无贴图） ---------- */
+const MOON_DIR = new THREE.Vector3(-0.42, 0.55, -0.72).normalize();
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(150, 48, 32),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      topColor:    { value: new THREE.Color(0x0d1a2e) },
+      midColor:    { value: new THREE.Color(0x0a1220) },
+      bottomColor: { value: new THREE.Color(0x04060a) },
+      moonDir:     { value: MOON_DIR.clone() },
+      moonColor:   { value: new THREE.Color(0xbcd2f5) }
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor, midColor, bottomColor, moonDir, moonColor;
+      varying vec3 vDir;
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 col = mix(bottomColor, midColor, smoothstep(0.42, 0.56, h));
+        col = mix(col, topColor, smoothstep(0.56, 1.0, h));
+        float m = max(dot(d, normalize(moonDir)), 0.0);
+        col += moonColor * (pow(m, 260.0) * 1.9 + pow(m, 14.0) * 0.16 + pow(m, 3.0) * 0.03);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+  })
+);
+sky.frustumCulled = false;
+scene.add(sky);
+
+/* ---------- 月光 + 环境 ---------- */
+const hemi = new THREE.HemisphereLight(0x8ea8cf, 0x0a0f18, 0.55);
+scene.add(hemi);
+
+const moon = new THREE.DirectionalLight(0xa9c1e8, 1.5);
+moon.position.set(-9, 12, -8);
+moon.castShadow = true;
+moon.shadow.mapSize.set(2048, 2048);
+moon.shadow.camera.near = 1;
+moon.shadow.camera.far = 40;
+moon.shadow.camera.left = -9;
+moon.shadow.camera.right = 9;
+moon.shadow.camera.top = 9;
+moon.shadow.camera.bottom = -9;
+moon.shadow.bias = -0.0007;
+scene.add(moon);
+
+/* ---------- 地面（程序化石材展厅） ---------- */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80, 80),
+  new THREE.MeshStandardMaterial({ color: 0x0d1119, roughness: 0.94, metalness: 0.06 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(80, 80, 0x1c2a3d, 0x121a26);
+grid.position.y = 0.001;
+grid.material.transparent = true;
+grid.material.opacity = 0.5;
+scene.add(grid);
+
+/* ---------- 展台 + 每件器物的暖光（按实际加载成功的件数生成） ---------- */
+const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x151b26, roughness: 0.72, metalness: 0.28 });
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x3d5f8f, transparent: true, opacity: 0.55 });
+
+function makePedestal(p, i, x) {
+  const g = new THREE.Group();
+  g.position.set(x, 0, -0.045 * x * x);   // 轻微内凹的弧线展位
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.70, PEDESTAL_H, 48, 1), pedestalMat);
+  body.position.y = PEDESTAL_H / 2;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  g.add(body);
+
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.60, 0.665, 64), ringMat.clone());
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = PEDESTAL_H + 0.002;
+  g.add(ring);
+
+  // 地面光池（假光，纯程序化）
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(1.15, 48),
+    new THREE.MeshBasicMaterial({ color: 0x2a3f5e, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.004;
+  g.add(pool);
+
+  const spot = new THREE.SpotLight(0xffd7a1, 22, 9, 0.62, 0.75, 1.9);
+  spot.position.set(0, 4.4, 1.1);
+  spot.target.position.set(0, PEDESTAL_H, 0);
+  g.add(spot, spot.target);
+
+  g.userData.propIndex = i;
+  p.group = g;
+  p.ring = ring;
+  p.spot = spot;
+  p.x = x;
+  scene.add(g);
+  return g;
+}
+
+/* ---------- 交互 ---------- */
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 4.6;
+controls.maxDistance = 16;
+controls.maxPolarAngle = Math.PI * 0.52;
+controls.target.set(0, 1.05, 0);
+controls.update();
+
+let OVERVIEW = {
+  target: new THREE.Vector3(0, 1.0, -0.5),
+  pos: new THREE.Vector3(0, 3.6, 10.6),
+  minD: 4.8
+};
+
+// 展厅件数决定取景距离：件数越多机位越远，保证 8 件都在画面里
+function setOverview(n) {
+  const z = 7.6 + n * 0.80;
+  const y = 2.9 + n * 0.20;
+  OVERVIEW = {
+    target: new THREE.Vector3(0, 1.0, -0.5),
+    pos: new THREE.Vector3(0, y, z),
+    minD: 4.6 + n * 0.2
+  };
+  controls.maxDistance = Math.max(22, z * 2.2);
+}
+
+let active = -1;
+let autoRotate = false;
+let tween = null;
+
+const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+function flyTo(target, pos, minD, dur = 750) {
+  tween = {
+    t0: performance.now(), dur,
+    fromT: controls.target.clone(), toT: target.clone(),
+    fromP: camera.position.clone(), toP: pos.clone(),
+    fromMin: controls.minDistance, toMin: minD
+  };
+}
+
+function frameProp(p) {
+  const c = p.worldCenter;
+  const r = p.maxDim;
+  const dir = new THREE.Vector3(0.42, 0.30, 0.86).normalize();
+  const pos = c.clone().addScaledVector(dir, r * 3.05);
+  flyTo(c, pos, r * 1.55);   // 中远景：最近只能到 1.55 倍包络，禁止贴脸
+}
+
+function focus(i) {
+  active = i;
+  [...navRow.children].forEach(b => b.classList.toggle('on', Number(b.dataset.idx) === i));
+  if (i < 0) flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD);
+  else frameProp(PROPS[i]);
+  updateMeta();
+}
+
+function updateMeta() {
+  if (active < 0) {
+    const line = PROPS.map(p => `${p.model ? '●' : '○'} ${p.name}`).join('　');
+    const ok = PROPS.filter(p => p.model).length;
+    metaEl.innerHTML = `<b>全景</b> · ${ok} / 8 件已接入<br>`
+      + `<span>${line}</span><br>`
+      + `<span>点击展台或右上角按钮切换器物；拖拽旋转，滚轮缩放（最小距离已锁定）</span>`;
+  } else {
+    const p = PROPS[active];
+    metaEl.innerHTML = `<b>${p.name}</b> · ${p.note}<br>`
+      + `<span>${p.tris} 三角面 · 贴图 ${p.texCount} 张（${p.texSize}） · 尺寸 ${p.dim}</span>`;
+  }
+}
+
+/* 导航按钮（按加载成功的件数生成） */
+function buildNav() {
+  navRow.innerHTML = '';
+  PROPS.forEach((p, i) => {
+    if (!p.model) return;
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.dataset.idx = i;
+    b.textContent = p.name;
+    p.navBtn = b;
+    b.addEventListener('click', () => pick(i));
+    navRow.appendChild(b);
+  });
+  const ov = document.createElement('button');
+  ov.className = 'btn on';
+  ov.dataset.idx = -1;
+  ov.textContent = '全景';
+  ov.addEventListener('click', () => focus(-1));
+  navRow.appendChild(ov);
+}
+
+/* ---------- 玩法：按诗句顺序点亮 ---------- */
+let toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+
+function updateGame() {
+  const cur = SONG[gStep];
+  gLine.textContent = gDone ? '八宝归位 · 夜游完成'
+    : `第 ${gStep + 1} 句 · ${cur.line}`;
+  gProg.innerHTML = SONG.map((_, k) => `<i class="${k < gStep ? 'on' : ''}"></i>`).join('');
+}
+
+function lightKey(key, on) {
+  const p = PROPS.find(x => x.key === key);
+  if (!p) return;
+  p.lit = on;
+  if (p.spot) p.spot.intensity = on ? 34 : 22;
+  if (p.navBtn) p.navBtn.classList.toggle('lit', on);
+}
+
+function pick(i) {
+  focus(i);
+  if (gDone || i < 0) return;
+  const p = PROPS[i];
+  const want = SONG[gStep] && SONG[gStep].key;
+  if (p.key === want) {
+    gStep++;
+    lightKey(p.key, true);
+    updateGame();
+    gHint.textContent = `已点亮 ${p.name}`;
+    toast(`已点亮 · ${p.name}（${gStep}/8）`);
+    if (gStep >= SONG.length) {
+      gDone = true;
+      updateGame();
+      setTimeout(() => finishEl.classList.add('show'), 700);
+    }
+  } else {
+    gHint.textContent = '不是这件 · 再读一遍当前诗句';
+    toast('顺序不对 · 器物不会熄灭，慢慢找');
+  }
+}
+
+function resetGame() {
+  gStep = 0;
+  gDone = false;
+  PROPS.forEach(p => lightKey(p.key, false));
+  finishEl.classList.remove('show');
+  updateGame();
+  gHint.textContent = '依照诗句，点击对应的器物';
+  focus(-1);
+}
+
+document.getElementById('btnAgain').addEventListener('click', resetGame);
+updateGame();
+gHint.textContent = '依照诗句，点击对应的器物';
+
+document.getElementById('btnOverview').addEventListener('click', () => focus(-1));
+document.getElementById('btnRotate').addEventListener('click', e => {
+  autoRotate = !autoRotate;
+  e.currentTarget.classList.toggle('on', autoRotate);
+});
+
+/* 点击展台/器物 -> 聚焦 */
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', ev => {
+  ptr.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const hits = ray.intersectObjects(PROPS.filter(p => p.model).map(p => p.group), true);
+  if (!hits.length) return;
+  let o = hits[0].object;
+  while (o && o.userData.propIndex === undefined) o = o.parent;
+  if (o && o.userData.propIndex >= 0) pick(o.userData.propIndex);
+});
+
+/* ---------- 逐件加载 ---------- */
+const loader = new GLTFLoader();
+const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
+
+function inspect(obj) {
+  let tris = 0;
+  const tex = new Set();
+  const texSizes = new Set();
+  obj.traverse(o => {
+    if (o.isMesh && o.geometry) {
+      const g = o.geometry;
+      tris += (g.index ? g.index.count : (g.attributes.position?.count || 0)) / 3;
+      if (o.material) {
+        for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap']) {
+          const m = o.material[k];
+          if (m && m.image) {
+            tex.add(m.uuid);
+            if (m.image.width) texSizes.add(`${m.image.width}×${m.image.height}`);
+          }
+        }
+      }
+    }
+  });
+  return { tris, texCount: tex.size, texSize: [...texSizes].join(' / ') || '—' };
+}
+
+async function loadProp(p, i) {
+  return new Promise(resolve => {
+    loader.load(p.file, gltf => {
+      const obj = gltf.scene;
+      obj.traverse(o => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+          if (o.material) {
+            o.material.side = THREE.FrontSide;
+            o.material.envMapIntensity = 0.6;
+          }
+        }
+      });
+
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const maxDimRaw = Math.max(size.x, size.y, size.z) || 1;
+      const s = NORM_MAX / maxDimRaw;
+
+      obj.scale.setScalar(s);
+      obj.position.set(-center.x * s, PEDESTAL_H - box.min.y * s, -center.z * s);
+      obj.userData.propIndex = i;
+
+      p.model = obj;
+      const info = inspect(obj);
+      p.tris = fmt(info.tris);
+      p.texCount = info.texCount || 1;
+      p.texSize = info.texSize;
+      p.dim = `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
+
+      resolve(true);
+    }, ev => {
+      if (ev.lengthComputable) {
+        const pct = Math.min(100, ev.loaded / ev.total * 100);
+        loadFill.style.width = ((i / PROPS.length) * 100 + pct / PROPS.length).toFixed(0) + '%';
+      }
+    }, err => {
+      console.warn('加载失败', p.file, err);
+      resolve(false);
+    });
+  });
+}
+
+(async () => {
+  for (let i = 0; i < PROPS.length; i++) {
+    loadText.textContent = `正在布展：${PROPS[i].name}（${i + 1}/${PROPS.length}）`;
+    await loadProp(PROPS[i], i);
+  }
+  const loaded = PROPS.filter(p => p.model);
+  if (!loaded.length) {
+    loadingEl.classList.add('hide');
+    errorEl.style.display = 'flex';
+    errorEl.innerHTML = `器物全部加载失败。<br>请确认 D:\\AHOLO\\web\\outputs 联接有效，且 8899 服务已启动。`;
+    return;
+  }
+
+  // 按实际成功件数沿弧线排布，失败的题材不占展台
+  const SPACING = 1.5;
+  loaded.forEach((p, k) => {
+    const x = (k - (loaded.length - 1) / 2) * SPACING;
+    const g = makePedestal(p, PROPS.indexOf(p), x);
+    g.add(p.model);
+    p.maxDim = NORM_MAX;
+    p.worldCenter = new THREE.Vector3(x, PEDESTAL_H + NORM_MAX * 0.5, -0.045 * x * x);
+  });
+
+  setOverview(loaded.length);
+  buildNav();
+  loadFill.style.width = '100%';
+  loadingEl.classList.add('hide');
+  setTimeout(() => loadingEl.remove(), 600);
+  updateMeta();
+  // 入场：从更远处缓慢推近
+  camera.position.set(0, OVERVIEW.pos.y + 3.2, OVERVIEW.pos.z + 7.5);
+  flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD, 1800);
+})();
+
+/* ---------- 主循环 ---------- */
+let last = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  if (tween) {
+    const k = Math.min(1, (now - tween.t0) / tween.dur);
+    const e = ease(k);
+    controls.target.lerpVectors(tween.fromT, tween.toT, e);
+    camera.position.lerpVectors(tween.fromP, tween.toP, e);
+    controls.minDistance = tween.fromMin + (tween.toMin - tween.fromMin) * e;
+    if (k >= 1) tween = null;
+  } else if (autoRotate) {
+    const r = controls.target;
+    const dx = camera.position.x - r.x, dz = camera.position.z - r.z;
+    const ang = dt * 0.28;
+    camera.position.x = r.x + dx * Math.cos(ang) - dz * Math.sin(ang);
+    camera.position.z = r.z + dx * Math.sin(ang) + dz * Math.cos(ang);
+  }
+
+  // 展台环随视角轻微呼吸，纯程序化氛围
+  const t = now * 0.001;
+  PROPS.forEach((p, i) => {
+    if (!p.ring) return;
+    const on = i === active;
+    const lit = !!p.lit;
+    p.ring.material.opacity = (lit ? 0.95 : on ? 0.85 : 0.42) + Math.sin(t * 1.2 + i) * 0.08;
+    p.ring.material.color.setHex(lit || on ? 0xd9bd7d : 0x3d5f8f);
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(tick);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
