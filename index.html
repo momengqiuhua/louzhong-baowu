@@ -79,6 +79,57 @@
   #game .ghint { margin-top: 7px; min-height: 18px; color: #c9a06a; }
   .btn.lit { border-color: #6b5527; color: #f0dcae; background: rgba(44,36,22,.78); }
 
+  /* ---------- 走位 HUD：小地图 / 操作提示卡 / 摇杆 ---------- */
+  /* 小地图挂在右侧面板里（跟随按钮流式排布，永不与按钮重叠） */
+  #mapBox {
+    width: 116px; margin-top: 6px;
+    padding: 8px 10px 6px; border-radius: 10px;
+    background: rgba(10,14,20,.78); border: 1px solid #1e2735;
+    backdrop-filter: blur(8px); transition: width .18s;
+  }
+  #mapBox .mt { display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; letter-spacing: .18em; color: #6f7f96; margin-bottom: 4px; }
+  #mapBox .mt b { color: #c8a96a; font-weight: 500; letter-spacing: .06em; }
+  #mapBox .mt button { cursor: pointer; background: none; border: 0; padding: 2px 0 2px 6px;
+    color: #6f7f96; font-size: 10px; letter-spacing: .06em; }
+  #mapBox .mt button:hover { color: #d6c79f; }
+  #mapCv { display: block; width: 96px; height: 198px; }
+  #mapBox .ms { margin-top: 4px; font-size: 10px; letter-spacing: .06em; color: #6f7f96; }
+  #mapBox .ms b { color: #d6c79f; font-weight: 500; }
+  #mapBox.off { width: 88px; }
+  #mapBox.off #mapCv, #mapBox.off .ms { display: none; }
+
+  #hintCard {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 11;
+    width: min(440px, 88vw); padding: 22px 24px; border-radius: 14px;
+    background: rgba(12,16,23,.95); border: 1px solid #46381f;
+    box-shadow: 0 24px 70px rgba(0,0,0,.62);
+    color: #9aa6b7; font-size: 12.5px; line-height: 1.85; display: none;
+  }
+  #hintCard.show { display: block; }
+  #hintCard h3 { font-size: 15px; letter-spacing: .16em; color: #f0dcae; font-weight: 600; margin-bottom: 14px; }
+  #hintCard .kv { display: grid; grid-template-columns: 46px 1fr; gap: 5px 10px; }
+  #hintCard .kv i { font-style: normal; color: #d6c79f; letter-spacing: .06em; }
+  #hintCard .kbd {
+    display: inline-block; min-width: 20px; text-align: center; padding: 1px 6px; margin-right: 3px;
+    border: 1px solid #2f3a49; border-bottom-width: 2px; border-radius: 5px;
+    background: #161d28; color: #cfd8e5; font-size: 11px;
+  }
+  #hintCard .close { margin-top: 18px; width: 100%; }
+
+  #stick { display: none; }
+  body.touch #stick {
+    display: block; position: fixed; left: 18px; bottom: 26px; z-index: 8;
+    width: 104px; height: 104px; border-radius: 50%; touch-action: none;
+    background: rgba(16,21,29,.5); border: 1px solid #2b3442;
+    backdrop-filter: blur(6px);
+  }
+  #stick i {
+    position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; margin: -21px 0 0 -21px;
+    border-radius: 50%; background: rgba(200,169,106,.5); border: 1px solid #c8a96a;
+  }
+  body.touch .hud .sub { display: none; }
+
   #toast {
     position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); z-index: 9;
     padding: 9px 16px; border-radius: 9px; background: rgba(20,14,10,.92);
@@ -108,7 +159,11 @@
     .hud .sub { display: none; }
     .meta { display: none; }
     #game { left: 12px; right: 12px; bottom: 12px; width: auto; }
+    body.touch #game { bottom: 146px; }
     #toast { bottom: 120px; font-size: 12px; }
+    #mapBox { width: 88px; padding: 6px 7px 4px; }
+    #mapCv { width: 72px; height: 148px; }
+    #mapBox.off { width: 74px; }
   }
   /* ---------- 封面页 ---------- */
   #cover {
@@ -209,6 +264,13 @@
     <button class="btn" id="btnRotate">自动旋转</button>
     <button class="btn" id="btnLight">昼夜</button>
     <button class="btn" id="btnOverview">全景</button>
+    <button class="btn" id="btnHelp">?</button>
+  </div>
+
+  <div id="mapBox">
+    <div class="mt"><b>馆内定位</b><button id="mapToggle">收起</button></div>
+    <canvas id="mapCv" width="192" height="396"></canvas>
+    <div class="ms">步速 <b id="spdVal">3.0</b> m/s</div>
   </div>
 </div>
 
@@ -220,6 +282,22 @@
   <div class="gprog" id="gProg"></div>
   <div class="ghint" id="gHint"></div>
 </div>
+
+<div id="hintCard">
+  <h3>怎么逛这座馆</h3>
+  <div class="kv">
+    <i>移动</i><span><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>或 <span class="kbd">↑</span><span class="kbd">←</span><span class="kbd">↓</span><span class="kbd">→</span> 前后左右，方向跟着视线走</span>
+    <i>转头</i><span>按住<b>鼠标左键或右键</b>拖动，水平可转 360°，上下有俯仰限位；轻点展柜近观</span>
+    <i>疾走</i><span><span class="kbd">Shift</span>加速到 8 m/s</span>
+    <i>升降</i><span><span class="kbd">空格</span>升 · <span class="kbd">Alt</span>/<span class="kbd">E</span>降 · <span class="kbd">Q</span>也升</span>
+    <i>俯瞰</i><span><span class="kbd">F</span>升到 4.8m 俯看全馆，再按回落</span>
+    <i>回位</i><span><span class="kbd">R</span>回到入口站姿</span>
+    <i>步速</i><span>滚轮调节，右下角实时显示</span>
+  </div>
+  <button class="btn close" id="hintClose">开始逛展</button>
+</div>
+
+<div id="stick"><i id="stickKnob"></i></div>
 
 <div id="toast"></div>
 
@@ -291,6 +369,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const app = document.getElementById('app');
 const metaEl = document.getElementById('meta');
@@ -310,17 +389,17 @@ const bootPromise = new Promise(r => { resolveBoot = r; });
 /* 画质档位状态：basic / high；auto 表示已因掉帧降级 */
 const Q = { mode: 'basic', lowFps: 0, auto: false };
 
-/* ---------- 8 件器物（模型随页面同目录的 outputs/ 一起部署） ---------- */
+/* ---------- 8 件器物（原件走魔搭模型库；fb 为压缩版兜底） ---------- */
 /* pos=[x,z]：第一展厅主位鼎 + 两件陪衬；第二展厅主位方尊 + 两件；第三展厅主位仙鹤 + 香炉 */
 const PROPS = [
-  { key: 'gu',        name: '青铜觚',   note: '商周饮酒器 · 喇叭口', file: 'outputs/prop_gu_g1turbo/extract/mesh/tex_mesh.glb',          pos: [-6.30,   9.60], scale: 0.95 },
-  { key: 'bianzhong', name: '编钟',     note: '青铜礼乐重器',       file: 'outputs/prop_bianzhong_g1turbo/extract/mesh/tex_mesh.glb',    pos: [ 6.30,   9.60], scale: 1.05 },
-  { key: 'crane',     name: '仙鹤雕塑', note: '黄鹤意象 · 石雕',     file: 'outputs/prop_crane_statue_g1turbo/extract/mesh/tex_mesh.glb', pos: [ 0.00, -22.00], scale: 1.10, main: true },
-  { key: 'ding',      name: '青铜鼎',   note: '镇馆之宝 · 三足双耳 · 商周礼器', file: 'outputs/ai_ding_g1turbo/extract/mesh/tex_mesh.glb', pos: [ 0.00,   5.00], scale: 1.20, hero: true },
-  { key: 'fangyi',    name: '青铜方尊', note: '兽面纹 · 四扉棱 · 商周礼器', file: 'outputs/prop_fangyi_g1turbo/extract/mesh/tex_mesh.glb', pos: [ 0.00,  -8.00], scale: 1.10, main: true },
-  { key: 'boshanlu',  name: '博山炉',   note: '汉代香炉 · 山形盖',   file: 'outputs/prop_boshanlu_g1turbo/extract/mesh/tex_mesh.glb',    pos: [ 6.30, -26.20], scale: 0.80 },
-  { key: 'drum',      name: '铜鼓',     note: '太阳纹 · 打击礼器',   file: 'outputs/prop_bronzedrum_g1turbo/extract/mesh/tex_mesh.glb',  pos: [-6.30,  -4.40], scale: 0.95 },
-  { key: 'lantern',   name: '宫灯',     note: '暖光宫灯 · 夜游点题', file: 'outputs/prop_lantern2_g1turbo/extract/mesh/tex_mesh.glb',    pos: [ 6.30, -12.20], scale: 0.90 }
+  { key: 'gu',        name: '青铜觚',   note: '商周饮酒器 · 喇叭口', file: 'prop_gu_g1turbo.glb',           fb: 'outputs/prop_gu_g1turbo/extract/mesh/tex_mesh.glb',          pos: [-6.30,   9.60], scale: 0.95 },
+  { key: 'bianzhong', name: '编钟',     note: '青铜礼乐重器',       file: 'prop_bianzhong_g1turbo.glb',     fb: 'outputs/prop_bianzhong_g1turbo/extract/mesh/tex_mesh.glb',    pos: [ 6.30,   9.60], scale: 1.05 },
+  { key: 'crane',     name: '仙鹤雕塑', note: '黄鹤意象 · 石雕',     file: 'prop_crane_statue_g1turbo.glb',  fb: 'outputs/prop_crane_statue_g1turbo/extract/mesh/tex_mesh.glb', pos: [ 0.00, -22.00], scale: 1.10, main: true },
+  { key: 'ding',      name: '青铜鼎',   note: '镇馆之宝 · 三足双耳 · 商周礼器', file: 'ai_ding_g1turbo.glb', fb: 'outputs/ai_ding_g1turbo/extract/mesh/tex_mesh.glb', pos: [ 0.00,   5.00], scale: 1.20, hero: true },
+  { key: 'fangyi',    name: '青铜方尊', note: '兽面纹 · 四扉棱 · 商周礼器', file: 'prop_fangyi_g1turbo.glb', fb: 'outputs/prop_fangyi_g1turbo/extract/mesh/tex_mesh.glb', pos: [ 0.00,  -8.00], scale: 1.10, main: true },
+  { key: 'boshanlu',  name: '博山炉',   note: '汉代香炉 · 山形盖',   file: 'prop_boshanlu_g1turbo.glb',      fb: 'outputs/prop_boshanlu_g1turbo/extract/mesh/tex_mesh.glb',    pos: [ 6.30, -26.20], scale: 0.80 },
+  { key: 'drum',      name: '铜鼓',     note: '太阳纹 · 打击礼器',   file: 'prop_bronzedrum_g1turbo.glb',    fb: 'outputs/prop_bronzedrum_g1turbo/extract/mesh/tex_mesh.glb',  pos: [-6.30,  -4.40], scale: 0.95 },
+  { key: 'lantern',   name: '宫灯',     note: '暖光宫灯 · 夜游点题', file: 'prop_lantern2_g1turbo.glb',      fb: 'outputs/prop_lantern2_g1turbo/extract/mesh/tex_mesh.glb',    pos: [ 6.30, -12.20], scale: 0.90 }
 ];
 
 /* ---------- 最小玩法：八句诗对应八件器（按诗句顺序点亮） ---------- */
@@ -347,11 +426,18 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = false;   // 馆内照明靠聚光 + 自发光，关阴影保帧率
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.34;
 app.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0b0d10, 0.014);
+scene.fog = new THREE.FogExp2(0x171310, 0.011);
+
+/* ---------- IBL：程序化室内环境图（不依赖外网 HDR），金属才有可读反射 ---------- */
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envRT = pmrem.fromScene(new RoomEnvironment(), 0.06);
+scene.environment = envRT.texture;
+scene.environmentIntensity = 0.34;
+pmrem.dispose();
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 60);
 camera.position.set(0, 1.65, 22.6);
@@ -531,7 +617,10 @@ const floorTex = canvasTex(512, 512, (g, w, h) => {
 floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
 floorTex.repeat.set(6, 12);
 
-const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.35, metalness: 0.06 });
+/* 鎏金地板：深底 + 高金属度，反射展柜灯与金饰；粗糙度留一点避免"镜子感" */
+const floorMat = new THREE.MeshStandardMaterial({
+  map: floorTex, color: 0xd2ab72, roughness: 0.24, metalness: 0.88, envMapIntensity: 1.05
+});
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, FLOOR_LEN), floorMat);
 floor.rotation.x = -Math.PI / 2;
 floor.position.set(0, 0.004, FLOOR_CZ);
@@ -805,6 +894,49 @@ const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x141a22, roughness:
 const ringMat = new THREE.MeshBasicMaterial({ color: 0x3d5f8f, transparent: true, opacity: 0.5 });
 const baseMat = new THREE.MeshStandardMaterial({ color: 0x1d1611, roughness: 0.86, metalness: 0.05 });
 
+/* 中式柜体纹样：回纹带 + 云纹角饰（canvas 程序化，无外部素材） */
+function drawPattern(g, w, h, dense) {
+  const gold = '#c9a25e';
+  g.fillStyle = '#0d0a07'; g.fillRect(0, 0, w, h);
+  for (let k = 0; k < 2400; k++) {
+    g.fillStyle = `rgba(216,190,146,${0.012 + Math.random() * 0.02})`;
+    g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+  }
+  g.strokeStyle = gold; g.lineWidth = 6; g.strokeRect(14, 14, w - 28, h - 28);
+  g.lineWidth = 2; g.strokeRect(27, 27, w - 54, h - 54);
+  // 回纹单元：方形螺旋
+  const hui = (cx, cy, s) => {
+    g.beginPath();
+    g.moveTo(cx - s, cy + s); g.lineTo(cx - s, cy - s); g.lineTo(cx + s, cy - s);
+    g.lineTo(cx + s, cy + s); g.lineTo(cx - s * 0.28, cy + s); g.lineTo(cx - s * 0.28, cy - s * 0.28);
+    g.lineTo(cx + s * 0.28, cy - s * 0.28); g.stroke();
+  };
+  g.lineWidth = 3.4; g.strokeStyle = gold;
+  const step = dense ? 34 : 44, s = dense ? 9.5 : 12;
+  for (let x = 60; x < w - 42; x += step) { hui(x + 11, 47, s); hui(x + 11, h - 47, s); }
+  // 云纹角饰
+  const yun = (cx, cy, sc) => {
+    g.save(); g.translate(cx, cy); g.scale(sc, sc);
+    g.lineWidth = 4.2 / sc;   // 抵消 scale，否则线宽会被放大成实心块
+    g.beginPath();
+    g.moveTo(0, 0.92);
+    g.bezierCurveTo(-0.95, 0.92, -1.02, 0.0, -0.44, -0.16);
+    g.bezierCurveTo(-0.88, -0.78, 0.12, -1.02, 0.16, -0.36);
+    g.bezierCurveTo(0.36, -0.98, 1.0, -0.62, 0.7, 0.1);
+    g.bezierCurveTo(0.96, 0.66, 0.36, 1.0, 0, 0.92);
+    g.stroke(); g.restore();
+  };
+  g.lineWidth = 4.2;
+  yun(96, 108, 48); yun(w - 96, 108, 48); yun(96, h - 108, 48); yun(w - 96, h - 108, 48);
+  g.globalAlpha = 0.42; g.lineWidth = 3; yun(w / 2, h / 2, 104); g.globalAlpha = 1;
+}
+const patternTex = canvasTex(1024, 1024, (g) => { g.scale(2, 2); drawPattern(g, 512, 512, false); });
+const patternTexHero = canvasTex(1024, 1024, (g) => { g.scale(2, 2); drawPattern(g, 512, 512, true); });
+const caseSideMat = new THREE.MeshStandardMaterial({ map: patternTex, roughness: 0.82, metalness: 0.06, envMapIntensity: 0.45 });
+const caseSideMatHero = new THREE.MeshStandardMaterial({ map: patternTexHero, roughness: 0.8, metalness: 0.08, envMapIntensity: 0.5 });
+const caseTopMat = new THREE.MeshStandardMaterial({ color: 0x0f0c09, roughness: 0.55, metalness: 0.3 });
+const trimMat = new THREE.MeshStandardMaterial({ color: 0xd9b574, roughness: 0.26, metalness: 0.96, envMapIntensity: 1.2 });
+
 const glassMat = new THREE.MeshStandardMaterial({
   color: 0xbfe0ff, roughness: 0.06, metalness: 0.0,
   transparent: true, opacity: 0.09, depthWrite: false,
@@ -854,14 +986,25 @@ function makePedestal(p, i) {
   g.position.set(p.pos[0], 0, p.pos[1]);
 
   const rTop = hero ? 0.9 : 0.6, rBot = hero ? 1.0 : 0.7;
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, PEDESTAL_H, hero ? 56 : 40, 1), pedestalMat);
+  // 方形柜体：四面回纹/云纹，上下鎏金包边
+  const hw = (hero ? CASE_HERO.w : CASE_N.w) / 2;
+  const sideMat = hero ? caseSideMatHero : caseSideMat;
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(hw * 2, PEDESTAL_H, hw * 2),
+    [sideMat, sideMat, caseTopMat, caseTopMat, sideMat, sideMat]
+  );
   body.position.y = PEDESTAL_H / 2;
   body.receiveShadow = true;
   g.add(body);
+  for (const y of [0.024, PEDESTAL_H - 0.024]) {
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 0.055, 0.032, hw * 2 + 0.055), trimMat);
+    collar.position.y = y;
+    g.add(collar);
+  }
 
-  const ring = new THREE.Mesh(new THREE.RingGeometry(rTop - 0.03, rTop + 0.05, 64), ringMat.clone());
+  const ring = new THREE.Mesh(new THREE.PlaneGeometry(hw * 1.94, hw * 1.94), ringMat.clone());
   ring.rotation.x = -Math.PI / 2;
-  ring.position.y = PEDESTAL_H + 0.003;
+  ring.position.y = PEDESTAL_H + 0.004;
   g.add(ring);
 
   // 柜内底座
@@ -921,7 +1064,7 @@ function makePedestal(p, i) {
   g.add(pool);
 
   // 展品射灯：按调研 I≈300·d²（d=4m→4800cd，d=5m→7500cd），d≈4.5m
-  p.spotBase = hero ? 6200 : 4600;
+  p.spotBase = hero ? 4200 : 3200;
   const spot = new THREE.SpotLight(0xffd9b0, p.spotBase, 0, hero ? 0.34 : 0.30, 0.72, 2);
   spot.position.set(0, HALL_H - 0.45, 0.5);
   spot.target.position.set(0, PEDESTAL_H + 0.3, 0);
@@ -1085,10 +1228,15 @@ foyerLamp.position.set(0, FOYER_H - 0.05, (Z.f0 + Z.f1) / 2);
 scene.add(foyerLamp);
 
 /* ---------- 环境光：先压暗，再靠射灯与金饰提亮 ---------- */
-const ambient = new THREE.AmbientLight(0xffe8d6, 0.30);
+const ambient = new THREE.AmbientLight(0xffe8d6, 0.52);
 scene.add(ambient);
-const hemi = new THREE.HemisphereLight(0xffe8d6, 0x14161a, 0.16);
+const hemi = new THREE.HemisphereLight(0xffe8d6, 0x1c1a17, 0.30);
 scene.add(hemi);
+
+/* 顶部面光：平行光不衰减，把远处的墙、壁画、柜体纹样托出来（近处依赖射灯，避免过曝） */
+const fill = new THREE.DirectionalLight(0xffe3c6, 0.7);
+fill.position.set(2, 14, 9);
+scene.add(fill);
 
 /* ---------- 交互 ---------- */
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -1119,6 +1267,296 @@ function setOverview() {
 let active = -1;
 let autoRotate = false;
 let tween = null;
+
+/* ================= 第一人称走位：WASD + 右键转视角 + 小地图 ================= */
+/* OrbitControls 只保留"注视锚点"作用（flyTo / 电影模式 / 景深对焦），
+   相机位姿由 WALK 统一驱动，避免两套控制器互相拉扯。 */
+controls.enabled = false;
+controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+
+const EYE_REST = 1.65, EYE_MIN = 0.72, EYE_MAX = 5.4, EYE_TOP = 4.8;
+const SPAWN = { x: 0, z: 19.0, yaw: 0, pitch: -0.02, eye: EYE_REST };
+const WALK = {
+  yaw: SPAWN.yaw, pitch: SPAWN.pitch, eye: SPAWN.eye,
+  base: 3.0, mult: 1.0, top: false,
+  keys: Object.create(null), pad: { x: 0, y: 0 },
+  pt: null, eyeTo: null
+};
+
+/* 可行走区域（矩形并集，单位 m）；z=12 / -2 / -16 的隔墙各留 4.4m 门洞 */
+const NAV = [
+  { hx: 1.28, z0: 16.30, z1: 19.62 },   // 入口压缩通道
+  { hx: 9.15, z0: 12.02, z1: 16.62 },   // 序厅（挑高 10m）
+  { hx: 2.02, z0: 11.88, z1: 12.16 },   // 序厅 ↔ 第一展厅 门洞
+  { hx: 9.15, z0: 0.00, z1: 11.98 },    // 第一展厅
+  { hx: 3.55, z0: -1.98, z1: 0.02 },    // 过廊一
+  { hx: 2.02, z0: -2.14, z1: -1.86 },   // 过廊 ↔ 第二展厅 门洞
+  { hx: 9.15, z0: -13.98, z1: -2.02 },  // 第二展厅
+  { hx: 3.55, z0: -15.98, z1: -13.95 }, // 过廊二
+  { hx: 2.02, z0: -16.14, z1: -15.86 }, // 过廊 ↔ 第三展厅 门洞
+  { hx: 9.15, z0: -27.82, z1: -16.02 }  // 第三展厅
+];
+/* 展柜占位块：绕开柜体走，别穿模 */
+const OBST = PROPS.map(p => ({ x: p.pos[0], z: p.pos[1], h: p.hero ? 1.18 : 0.86 }));
+const inNav = (x, z) => NAV.some(r => Math.abs(x) <= r.hx && z >= r.z0 && z <= r.z1);
+const canStand = (x, z) => inNav(x, z) && !OBST.some(o => Math.abs(x - o.x) < o.h && Math.abs(z - o.z) < o.h);
+
+const _fwd = new THREE.Vector3();
+function walkApply() {
+  camera.position.y = WALK.eye;
+  const cp = Math.cos(WALK.pitch);
+  _fwd.set(-Math.sin(WALK.yaw) * cp, Math.sin(WALK.pitch), -Math.cos(WALK.yaw) * cp);
+  camera.lookAt(camera.position.x + _fwd.x, camera.position.y + _fwd.y, camera.position.z + _fwd.z);
+  controls.target.copy(camera.position).addScaledVector(_fwd, 3.4);   // 景深对焦锚点
+}
+
+function poseTo(x, z, yaw, pitch, eye, dur = 680) {
+  let dy = yaw - WALK.yaw;
+  while (dy > Math.PI) dy -= Math.PI * 2;
+  while (dy < -Math.PI) dy += Math.PI * 2;
+  WALK.pt = {
+    t0: performance.now(), dur,
+    fx: camera.position.x, fz: camera.position.z, tx: x, tz: z,
+    fy: WALK.yaw, ty: WALK.yaw + dy, fp: WALK.pitch, tp: pitch, fe: WALK.eye, te: eye
+  };
+  WALK.eyeTo = null;
+}
+
+/* 由 flyTo / 电影模式收尾的相机位姿反推走位状态，保证切换不跳变 */
+function syncWalkFromCamera() {
+  _fwd.copy(controls.target).sub(camera.position).normalize();
+  WALK.yaw = Math.atan2(-_fwd.x, -_fwd.z);
+  WALK.pitch = Math.asin(Math.max(-1, Math.min(1, _fwd.y)));
+  WALK.eye = Math.max(1.1, Math.min(3.2, camera.position.y));
+  WALK.eyeTo = EYE_REST;
+  WALK.top = false;
+}
+
+function toggleTop() {
+  WALK.top = !WALK.top;
+  // 24° 俯角：既能看清展柜与地面，又不会把远处器物顶出画面
+  poseTo(camera.position.x, camera.position.z, WALK.yaw,
+    WALK.top ? -0.42 : -0.02, WALK.top ? EYE_TOP : EYE_REST, 720);
+}
+function resetWalk() { WALK.top = false; poseTo(SPAWN.x, SPAWN.z, SPAWN.yaw, SPAWN.pitch, SPAWN.eye, 640); }
+
+function updateWalk(dt, now) {
+  // 位姿补间（R 回位 / F 俯瞰）
+  if (WALK.pt) {
+    const k = Math.min(1, (now - WALK.pt.t0) / WALK.pt.dur), e = ease(k), p = WALK.pt;
+    WALK.yaw = p.fy + (p.ty - p.fy) * e;
+    WALK.pitch = p.fp + (p.tp - p.fp) * e;
+    WALK.eye = p.fe + (p.te - p.fe) * e;
+    camera.position.x = p.fx + (p.tx - p.fx) * e;
+    camera.position.z = p.fz + (p.tz - p.fz) * e;
+    if (k >= 1) WALK.pt = null;
+    walkApply();
+    return;
+  }
+
+  const K = WALK.keys;
+  if (autoRotate) WALK.yaw += dt * 0.3;
+
+  // 竖直：空格 / Q 升，Alt / E 降
+  const vUp = (K[' '] || K.q ? 1 : 0) - (K.alt || K.e ? 1 : 0);
+  if (vUp) { WALK.eye = Math.max(EYE_MIN, Math.min(EYE_MAX, WALK.eye + vUp * 2.4 * dt)); WALK.eyeTo = null; WALK.top = false; }
+  else if (WALK.eyeTo !== null) {
+    WALK.eye += (WALK.eyeTo - WALK.eye) * Math.min(1, dt * 2.6);
+    if (Math.abs(WALK.eye - WALK.eyeTo) < 0.008) { WALK.eye = WALK.eyeTo; WALK.eyeTo = null; }
+  }
+
+  // 水平：WASD + 移动端摇杆（方向跟随视线）
+  let f = (K.w ? 1 : 0) - (K.s ? 1 : 0) + WALK.pad.y;
+  let s = (K.d ? 1 : 0) - (K.a ? 1 : 0) + WALK.pad.x;
+  const mag = Math.hypot(f, s);
+  if (mag > 0.001) {
+    if (mag > 1) { f /= mag; s /= mag; }
+    const sp = (K.shift ? 8.0 : WALK.base) * WALK.mult;
+    const fx = -Math.sin(WALK.yaw), fz = -Math.cos(WALK.yaw);
+    const rx = Math.cos(WALK.yaw), rz = -Math.sin(WALK.yaw);
+    const mx = fx * f + rx * s, mz = fz * f + rz * s;
+    const nx = camera.position.x + mx * sp * dt;
+    const nz = camera.position.z + mz * sp * dt;
+    // 分轴回退：贴墙时沿另一轴滑行，不会卡死
+    if (canStand(nx, nz)) { camera.position.x = nx; camera.position.z = nz; }
+    else if (canStand(nx, camera.position.z)) camera.position.x = nx;
+    else if (canStand(camera.position.x, nz)) camera.position.z = nz;
+  }
+
+  walkApply();
+}
+
+/* ---------- 键鼠输入 ---------- */
+const KEYMAP = {
+  ' ': ' ', shift: 'shift', alt: 'alt', control: 'ctrl', q: 'q', e: 'e', w: 'w', a: 'a', s: 's', d: 'd',
+  arrowup: 'w', arrowdown: 's', arrowleft: 'a', arrowright: 'd'
+};
+addEventListener('keydown', ev => {
+  const k = ev.key.toLowerCase();
+  if (KEYMAP[k]) { WALK.keys[KEYMAP[k]] = true; ev.preventDefault(); return; }
+  if (k === 'r') resetWalk();
+  else if (k === 'f') toggleTop();
+});
+addEventListener('keyup', ev => {
+  const k = ev.key.toLowerCase();
+  if (KEYMAP[k]) WALK.keys[KEYMAP[k]] = false;
+});
+addEventListener('blur', () => { WALK.keys = Object.create(null); WALK.pad.x = WALK.pad.y = 0; });
+
+const stage = renderer.domElement;
+stage.addEventListener('contextmenu', ev => ev.preventDefault());
+let look = null;
+let pickBlock = false;   // 这一次按下是"拖拽转头"，松手时不要触发点选
+stage.addEventListener('pointerdown', ev => {
+  pickBlock = false;
+  if (ev.pointerType === 'touch') { if (ev.clientX > innerWidth * 0.44) look = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0 }; return; }
+  // 左右键都能拖：左键轻点选器物，按住拖动就是转头
+  if (ev.button === 0 || ev.button === 2) {
+    look = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: 0 };
+    stage.setPointerCapture(ev.pointerId);
+  }
+});
+stage.addEventListener('pointermove', ev => {
+  if (!look || ev.pointerId !== look.id) return;
+  const dx = ev.clientX - look.x, dy = ev.clientY - look.y;
+  look.moved += Math.abs(dx) + Math.abs(dy);
+  if (look.moved > 6) pickBlock = true;
+  WALK.yaw -= dx * 0.0032;      // 水平不限，可 360° 环视
+  WALK.pitch = Math.max(-1.35, Math.min(1.35, WALK.pitch - dy * 0.0026));  // 俯仰限位，翻不过头顶
+  look.x = ev.clientX; look.y = ev.clientY;
+});
+const endLook = ev => { if (look && ev.pointerId === look.id) look = null; };
+stage.addEventListener('pointerup', endLook);
+stage.addEventListener('pointercancel', endLook);
+
+const spdVal = document.getElementById('spdVal');
+let spdLast = '';
+stage.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  WALK.mult = Math.max(0.4, Math.min(3, WALK.mult * (ev.deltaY > 0 ? 0.9 : 1.11)));
+  refreshSpeed();
+}, { passive: false });
+function refreshSpeed() {
+  const v = ((WALK.keys.shift ? 8.0 : WALK.base) * WALK.mult).toFixed(1);
+  if (v !== spdLast) { spdLast = v; spdVal.textContent = v; }
+}
+
+/* ---------- 移动端摇杆 ---------- */
+if ('ontouchstart' in window || matchMedia('(hover: none)').matches) document.body.classList.add('touch');
+const stick = document.getElementById('stick');
+const knob = document.getElementById('stickKnob');
+let stickId = null;
+function stickMove(ev) {
+  const r = stick.getBoundingClientRect();
+  let dx = ev.clientX - (r.left + r.width / 2);
+  let dy = ev.clientY - (r.top + r.height / 2);
+  const max = r.width * 0.34, d = Math.hypot(dx, dy);
+  if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+  knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  WALK.pad.x = dx / max;
+  WALK.pad.y = -dy / max;
+}
+stick.addEventListener('pointerdown', ev => { stickId = ev.pointerId; stick.setPointerCapture(ev.pointerId); stickMove(ev); ev.preventDefault(); });
+stick.addEventListener('pointermove', ev => { if (ev.pointerId === stickId) stickMove(ev); });
+const stickEnd = ev => {
+  if (ev.pointerId !== stickId) return;
+  stickId = null; WALK.pad.x = WALK.pad.y = 0;
+  knob.style.transform = '';
+};
+stick.addEventListener('pointerup', stickEnd);
+stick.addEventListener('pointercancel', stickEnd);
+
+/* ---------- 小地图：俯视平面 + 相机三角 ---------- */
+const mapCv = document.getElementById('mapCv');
+const mapCtx = mapCv.getContext('2d');
+const MW = mapCv.width, MH = mapCv.height, M_S = 7.6, M_CZ = -4.1;
+const mp = (x, z) => [MW / 2 + x * M_S, MH / 2 + (z - M_CZ) * M_S];
+const MAP_ROOMS = [
+  { hx: 1.45, z0: 16.8, z1: 19.7 },
+  { hx: 9.6, z0: 12.0, z1: 16.8 },
+  { hx: 9.6, z0: 0.0, z1: 12.0 },
+  { hx: 4.0, z0: -2.0, z1: 0.0 },
+  { hx: 9.6, z0: -14.0, z1: -2.0 },
+  { hx: 4.0, z0: -16.0, z1: -14.0 },
+  { hx: 9.6, z0: -28.0, z1: -16.0 }
+];
+let mapAcc = 0;
+function drawMap(now) {
+  const g = mapCtx;
+  g.clearRect(0, 0, MW, MH);
+  g.fillStyle = 'rgba(9,12,17,.92)';
+  g.fillRect(0, 0, MW, MH);
+
+  MAP_ROOMS.forEach(r => {
+    const [x0, y0] = mp(-r.hx, r.z0), [x1, y1] = mp(r.hx, r.z1);
+    g.fillStyle = 'rgba(40,48,60,.9)';
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    g.strokeStyle = 'rgba(200,169,106,.5)';
+    g.lineWidth = 1.6;
+    g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  });
+
+  // 器物点位：亮 = 已就位，暗 = 未加载
+  PROPS.forEach(p => {
+    const [px, py] = mp(p.pos[0], p.pos[1]);
+    g.beginPath();
+    g.arc(px, py, p.hero ? 4.6 : 3, 0, Math.PI * 2);
+    g.fillStyle = p.model ? (p.lit ? '#f4e3b6' : '#c8a96a') : 'rgba(130,142,158,.4)';
+    g.fill();
+  });
+
+  const [cx, cy] = mp(camera.position.x, camera.position.z);
+  const ang = Math.atan2(-Math.cos(WALK.yaw), -Math.sin(WALK.yaw));
+  g.save();
+  g.translate(cx, cy);
+  g.rotate(ang);
+  const grad = g.createRadialGradient(0, 0, 2, 0, 0, 52);
+  grad.addColorStop(0, 'rgba(236,206,140,.5)');
+  grad.addColorStop(1, 'rgba(236,206,140,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.arc(0, 0, 52, -0.6, 0.6);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.moveTo(9, 0); g.lineTo(-5, 5.2); g.lineTo(-5, -5.2);
+  g.closePath();
+  g.fillStyle = '#f7ecd0';
+  g.fill();
+  g.strokeStyle = '#6d5322';
+  g.lineWidth = 1.2;
+  g.stroke();
+  g.restore();
+
+  // 入口标记（放在图底，避开相机三角）
+  const [ex] = mp(0, 19.7);
+  g.fillStyle = 'rgba(200,169,106,.8)';
+  g.font = '10px sans-serif';
+  g.textAlign = 'center';
+  g.fillText('入口', ex, MH - 4);
+  g.textAlign = 'left';
+}
+
+const mapBox = document.getElementById('mapBox');
+document.getElementById('mapToggle').addEventListener('click', () => {
+  const off = mapBox.classList.toggle('off');
+  document.getElementById('mapToggle').textContent = off ? '展开' : '收起';
+});
+
+/* ---------- 操作提示卡（首次进入自动弹出，可随时用 ? 调出） ---------- */
+const hintCard = document.getElementById('hintCard');
+function showHint(on) { hintCard.classList.toggle('show', on); }
+document.getElementById('hintClose').addEventListener('click', () => {
+  showHint(false);
+  try { localStorage.setItem('aholo.hint', '1'); } catch (e) {}
+});
+document.getElementById('btnHelp').addEventListener('click', () => showHint(true));
+function maybeFirstHint() {
+  let seen = false;
+  try { seen = localStorage.getItem('aholo.hint') === '1'; } catch (e) {}
+  if (!seen) setTimeout(() => showHint(true), 500);
+}
 
 const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
@@ -1256,11 +1694,12 @@ function applyLightMode() {
   const d = dayMode;
   btnLight.textContent = d ? '昼间' : '夜游';
   btnLight.classList.toggle('on', d);
-  renderer.toneMappingExposure = (d ? 1.28 : 1.12) * (Q.mode === 'high' ? 1.05 : 1);
+  renderer.toneMappingExposure = (d ? 1.30 : 1.14) * (Q.mode === 'high' ? 1.05 : 1);
   hemi.color.setHex(0xffe8d6);
-  hemi.groundColor.setHex(d ? 0x2a2620 : 0x14161a);
-  hemi.intensity = d ? 0.46 : 0.16;
-  ambient.intensity = d ? 0.60 : 0.30;
+  hemi.groundColor.setHex(d ? 0x35302a : 0x1c1a17);
+  hemi.intensity = d ? 0.46 : 0.24;
+  ambient.intensity = d ? 0.72 : 0.42;
+  fill.intensity = d ? 1.0 : 0.7;
   moon.color.setHex(d ? 0xfff3da : 0x9fb6d8);
   moon.intensity = d ? 1.1 : 0.5;
   moon.position.set(d ? 9 : -9, 24, d ? 7 : -8);
@@ -1279,8 +1718,9 @@ btnLight.addEventListener('click', () => { dayMode = !dayMode; applyLightMode();
 /* 点击展台/器物 -> 聚焦 */
 const ray = new THREE.Raycaster();
 const ptr = new THREE.Vector2();
-renderer.domElement.addEventListener('pointerdown', ev => {
+renderer.domElement.addEventListener('click', ev => {
   if (cine.on) return;                       // 电影模式播放时不响应点选
+  if (ev.button !== 0 || pickBlock) return;  // 拖拽转头之后不当作点选
   ptr.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ptr, camera);
   const hits = ray.intersectObjects(PROPS.filter(p => p.model).map(p => p.group), true);
@@ -1290,10 +1730,11 @@ renderer.domElement.addEventListener('pointerdown', ev => {
   if (o && o.userData.propIndex >= 0) pick(o.userData.propIndex);
 });
 
-/* ---------- 逐件加载（并行 + CDN 加速 + 同源兜底） ---------- */
-/* GitHub Pages 国内实测仅 ~35KB/s，模型优先走魔搭（ModelScope）国内直链（实测 3MB/s，且返回 ACAO:*），失败再退回同源 */
+/* ---------- 逐件加载（并行 + 魔搭原件 + 压缩版兜底） ---------- */
+/* 原件 10 件共 194.75 MiB 已在魔搭模型库；实测 8 件并发：热缓存 3.7s / 冷缓存最慢 16.4s，总吞吐 9–41MB/s */
+const ORIGIN = 'https://modelscope.cn/models/wumingzhibai/louzhong-baowu-assets/resolve/master/';
+/* 兜底通道：旧压缩版（贴图 1024 + meshopt），原件拿不到时才用 */
 const CDN = 'https://www.modelscope.cn/datasets/wumingzhibai/aholo-louzhong-baowu/resolve/master/';
-// 贴图压成 1024 WebP + 几何 meshopt 压缩（每件 1–2.3MB），解码器随 three 一起加载
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
@@ -1350,13 +1791,17 @@ function fetchGLB(url, onPct, timeoutMs = 90000) {
 async function loadProp(p, i) {
   const onPct = v => { p.pct = Math.max(p.pct || 0, Math.min(1, v)); refreshProgress(); };
 
-  // 主通道：魔搭国内直链（25s 内拿不到就换同源，避免白等）
-  let gltf = await fetchGLB(CDN + p.file, onPct, 25000);
+  // 主通道：魔搭原件（单件 ~19MB，冷缓存最慢 45s 内必定拿不到就降级）
+  const t0 = performance.now();
+  let gltf = await fetchGLB(ORIGIN + p.file, onPct, 45000);
+  p.res = 'original';
   if (!gltf) {
-    p.pct = 0;
-    gltf = await fetchGLB(p.file, onPct, 60000);
+    // 兜底：旧压缩版（1–2.3MB），保证不会空柜
+    p.pct = 0; p.res = 'compressed';
+    gltf = await fetchGLB(CDN + p.fb, onPct, 20000) || await fetchGLB(p.fb, onPct, 30000);
   }
   if (!gltf) { p.fail = 'timeout'; console.warn('加载失败', p.file); return; }
+  p.ms = Math.round(performance.now() - t0);
 
   const obj = gltf.scene;
   obj.traverse(o => {
@@ -1453,8 +1898,8 @@ async function loadProp(p, i) {
 
 /* 序厅顶光下的华服立像：不进八宝玩法，仅作空间主角 */
 async function loadFoyerFigure() {
-  const gltf = (await fetchGLB(CDN + 'outputs/prop_hanfu_g1turbo/extract/mesh/tex_mesh.glb', () => {}))
-    || (await fetchGLB('outputs/prop_hanfu_g1turbo/extract/mesh/tex_mesh.glb', () => {}));
+  const gltf = (await fetchGLB(ORIGIN + 'prop_hanfu_g1turbo.glb', () => {}, 45000))
+    || (await fetchGLB(CDN + 'outputs/prop_hanfu_g1turbo/extract/mesh/tex_mesh.glb', () => {}, 20000));
   if (!gltf) return;
   const obj = gltf.scene;
   const box = new THREE.Box3().setFromObject(obj);
@@ -1684,8 +2129,8 @@ function stopCinema() {
   cine.on = false;
   document.body.classList.remove('cinema');
   letterboxEl.classList.remove('on');
-  controls.enabled = true;
-  controls.enableDamping = true;
+  controls.enabled = false;         // 相机由 WALK / 电影模式接管，OrbitControls 不再接输入
+  controls.enableDamping = false;
   focus(-1);
   flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD, 1200);
 }
@@ -1734,7 +2179,11 @@ async function enterFromCover(m) {
   }
   await switchMode(m, {
     persist: true,
-    after: () => { camera.position.set(0, 1.65, 25.5); flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD, 2200); }
+    after: () => {
+      camera.position.set(0, 1.65, 25.5);
+      flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD, 2200);
+      maybeFirstHint();
+    }
   });
   btnCinema.classList.remove('on');
 }
@@ -1758,36 +2207,47 @@ if ((savedMode === 'high' || savedMode === 'basic') && !isMobile) {
   bootPromise.then(() => {
     if (!coverEl.classList.contains('hide')) {
       coverEl.classList.add('hide');
-      switchMode(savedMode, { persist: false });
+      switchMode(savedMode, {
+        persist: false,
+        after: () => {
+          camera.position.set(0, 1.65, 19.0);
+          controls.target.set(0, 1.75, 4.0);
+          syncWalkFromCamera();
+        }
+      });
       btnCinema.classList.remove('on');
+      maybeFirstHint();
     }
   });
 }
 
-window.__dbg = { camera, controls, PROPS, flyTo, OVERVIEW, HALL_H, Z, Q, cine, startCinema, stopCinema, switchMode, __boot: boot };
+window.__dbg = { camera, controls, PROPS, flyTo, OVERVIEW, HALL_H, Z, Q, cine, startCinema, stopCinema, switchMode, WALK, NAV, SPAWN, poseTo, resetWalk, __boot: boot,
+  loadReport: () => PROPS.map(p => ({ key: p.key, name: p.name, res: p.res || 'pending', ms: p.ms || 0, pct: p.pct || 0, fail: p.fail || null, tris: p.tris, texSize: p.texSize })) };
 
 /* ---------- 主循环 ---------- */
 let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(0.12, (now - last) / 1000);
   last = now;
 
-  if (cine.on) updateCinema(now);
+  if (cine.on) { updateCinema(now); controls.update(); }
   else if (tween) {
     const k = Math.min(1, (now - tween.t0) / tween.dur);
     const e = ease(k);
     controls.target.lerpVectors(tween.fromT, tween.toT, e);
     camera.position.lerpVectors(tween.fromP, tween.toP, e);
     controls.minDistance = tween.fromMin + (tween.toMin - tween.fromMin) * e;
-    if (k >= 1) tween = null;
-  } else if (autoRotate && !cine.on) {
-    const r = controls.target;
-    const dx = camera.position.x - r.x, dz = camera.position.z - r.z;
-    const ang = dt * 0.28;
-    camera.position.x = r.x + dx * Math.cos(ang) - dz * Math.sin(ang);
-    camera.position.z = r.z + dx * Math.sin(ang) + dz * Math.cos(ang);
+    controls.update();                      // 由注视锚点决定朝向
+    if (k >= 1) { tween = null; syncWalkFromCamera(); }
+  } else {
+    updateWalk(dt, now);                    // 第一人称走位
   }
+
+  // 小地图（约 20fps 重绘，够用且不吃帧率）
+  mapAcc += dt;
+  if (mapAcc > 0.05) { mapAcc = 0; drawMap(now); }
+  refreshSpeed();
 
   // 镇馆之宝缓慢自转（唯一带旋转台）
   PROPS.forEach(p => { if (p.hero && p.model) p.model.rotation.y += dt * 0.22; });
@@ -1802,7 +2262,6 @@ function tick(now) {
     p.ring.material.color.setHex(lit || on ? 0xd9bd7d : 0x3d5f8f);
   });
 
-  controls.update();
   watchFps(now);
 
   if (Q.mode === 'high' && composer) {
