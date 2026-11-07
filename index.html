@@ -289,6 +289,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const app = document.getElementById('app');
@@ -1292,7 +1293,9 @@ renderer.domElement.addEventListener('pointerdown', ev => {
 /* ---------- 逐件加载（并行 + CDN 加速 + 同源兜底） ---------- */
 /* GitHub Pages 在国内带宽很差，模型优先走 jsDelivr 边缘节点，失败再退回同源 */
 const CDN = 'https://fastly.jsdelivr.net/gh/momengqiuhua/louzhong-baowu@main/';
+// 贴图压成 1024 WebP + 几何 meshopt 压缩（每件 1–2.3MB），解码器随 three 一起加载
 const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
 const fmt = n => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n));
 
 function inspect(obj) {
@@ -1323,23 +1326,50 @@ function refreshProgress() {
   loadText.textContent = `正在布展：${PROPS.filter(p => p.model).length} / ${PROPS.length} 件已就位`;
 }
 
-// 单次请求，45 秒拿不到就当失败
+// 单次请求，90 秒拿不到就当超时；404 单独标记，便于区分"文件缺失"与"网速慢"
 function fetchGLB(url, onPct) {
   return new Promise(resolve => {
     let settled = false;
-    const end = v => { if (!settled) { settled = true; resolve(v); } };
-    const timer = setTimeout(() => end(null), 45000);
-    loader.load(url, gltf => { clearTimeout(timer); end(gltf); }, ev => {
+    const end = (v, why) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!v) end.reason = why;
+      resolve(v);
+    };
+    const timer = setTimeout(() => end(null, 'timeout'), 90000);
+    loader.load(url, gltf => end(gltf), ev => {
       if (ev.lengthComputable) onPct(ev.loaded / ev.total);
-    }, () => { clearTimeout(timer); end(null); });
+    }, err => {
+      const msg = String((err && (err.message || err.type)) || '');
+      end(null, /40[34]/.test(msg) ? '404' : 'error');
+    });
+  });
+}
+
+// 双通道竞速：CDN 与同源同时尝试，谁先拿到用谁；CDN 先到就不再发同源请求
+function firstOf(promises) {
+  return new Promise(resolve => {
+    let done = false, pending = promises.length;
+    promises.forEach(pr => pr.then(v => {
+      pending--;
+      if (!done && v) { done = true; resolve(v); }
+      else if (pending === 0 && !done) { done = true; resolve(null); }
+    }, () => {
+      pending--;
+      if (pending === 0 && !done) { done = true; resolve(null); }
+    }));
   });
 }
 
 async function loadProp(p, i) {
   const onPct = v => { p.pct = Math.max(p.pct || 0, Math.min(1, v)); refreshProgress(); };
 
-  const gltf = (await fetchGLB(CDN + p.file, onPct)) || (await fetchGLB(p.file, onPct));
-  if (!gltf) { console.warn('加载失败', p.file); return; }
+  let cdnDone = false;
+  const cdnReq = fetchGLB(CDN + p.file, onPct).then(g => { if (g) cdnDone = true; return g; });
+  const localReq = new Promise(r => setTimeout(r, 2500)).then(() => cdnDone ? null : fetchGLB(p.file, onPct));
+  const gltf = await firstOf([cdnReq, localReq]);
+  if (!gltf) { p.fail = 'timeout'; console.warn('加载失败', p.file); return; }
 
   const obj = gltf.scene;
   obj.traverse(o => {
@@ -1386,31 +1416,50 @@ async function loadProp(p, i) {
   setOverview();
   refreshProgress();
 
-  await Promise.all(PROPS.map((p, i) => loadProp(p, i)));
+  // 先出画：任意 2 件到位就允许进馆，其余继续后台补齐
+  let firstCount = 0;
+  const readyOnce = () => {
+    if (boot.ready) return;
+    if (++firstCount < 2) return;
+    boot.ready = true;
+    buildNav();
+    loadFill.style.width = '100%';
+    loadingEl.classList.add('hide');
+    setTimeout(() => { if (loadingEl.parentNode) loadingEl.remove(); }, 600);
+    updateMeta();
+    resolveBoot();
+    camera.position.set(0, 1.65, 25.5);
+    flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD, 2400);
+  };
+
+  await Promise.all(PROPS.map(async (p, i) => {
+    await loadProp(p, i);
+    if (p.model) readyOnce();
+  }));
 
   const loaded = PROPS.filter(p => p.model);
   if (!loaded.length) {
+    boot.ready = true;
+    resolveBoot();
     loadingEl.classList.add('hide');
     errorEl.style.display = 'flex';
-    errorEl.innerHTML = `器物全部加载失败。<br>请刷新页面重试，或检查网络后重新打开。`;
+    const missNote = PROPS.every(p => p.fail === '404')
+      ? '服务端返回 404：模型文件缺失，请刷新或联系管理员。'
+      : '网络请求超时：文件较大且当前网速较慢，请换网络后刷新重试。';
+    errorEl.innerHTML = `器物全部加载失败。<br>${missNote}`;
     return;
   }
-
-  buildNav();
-  loadFill.style.width = '100%';
-  loadingEl.classList.add('hide');
-  setTimeout(() => loadingEl.remove(), 600);
+  if (!boot.ready) readyOnce();
   updateMeta();
-  boot.ready = true;
-  resolveBoot();
   if (loaded.length < PROPS.length) {
-    const miss = PROPS.filter(p => !p.model).map(p => p.name).join('、');
-    toast(`有 ${PROPS.length - loaded.length} 件未加载：${miss}`);
-    console.warn('缺件', miss);
+    const miss404 = PROPS.filter(p => !p.model && p.fail === '404').map(p => p.name);
+    const missSlow = PROPS.filter(p => !p.model && p.fail !== '404').map(p => p.name);
+    const parts = [];
+    if (miss404.length) parts.push(`缺失 ${miss404.length} 件（文件 404）：${miss404.join('、')}`);
+    if (missSlow.length) parts.push(`超时 ${missSlow.length} 件（网速慢）：${missSlow.join('、')}`);
+    toast(parts.join('；'));
+    console.warn('缺件', { miss404, missSlow });
   }
-  // 入场：从馆门外推进到入口机位
-  camera.position.set(0, 1.65, 25.5);
-  flyTo(OVERVIEW.target, OVERVIEW.pos, OVERVIEW.minD, 2400);
   // 序厅主角：华服立像（桌面端异步补；手机端与线上（模型未上传）跳过）
   if (!isMobile && !/github\.io$/i.test(location.hostname)) loadFoyerFigure();
 })();
