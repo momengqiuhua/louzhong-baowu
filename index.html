@@ -445,7 +445,7 @@ function toast(msg) {
 }
 
 function updateGame() {
-  const cur = SONG[gStep];
+  const cur = SONG[Math.min(gStep, SONG.length - 1)];
   gLine.textContent = gDone ? '八宝归位 · 夜游完成'
     : `第 ${gStep + 1} 句 · ${cur.line}`;
   gProg.innerHTML = SONG.map((_, k) => `<i class="${k < gStep ? 'on' : ''}"></i>`).join('');
@@ -467,12 +467,11 @@ function pick(i) {
   if (p.key === want) {
     gStep++;
     lightKey(p.key, true);
+    if (gStep >= SONG.length) gDone = true;
     updateGame();
-    gHint.textContent = `已点亮 ${p.name}`;
-    toast(`已点亮 · ${p.name}（${gStep}/8）`);
-    if (gStep >= SONG.length) {
-      gDone = true;
-      updateGame();
+    gHint.textContent = gDone ? '八件已全部点亮' : `已点亮 ${p.name}`;
+    toast(gDone ? '八宝归位 · 夜游完成' : `已点亮 · ${p.name}（${gStep}/8）`);
+    if (gDone) {
       setTimeout(() => finishEl.classList.add('show'), 700);
     }
   } else {
